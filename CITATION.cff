@@ -1,6 +1,13 @@
-@software{benedek2025kuramoto2,
-  author       = {Kristóf Benedek},
-  title        = {{kuramoto2: Simulation code for quantitative and qualitative power-grid studies}},
-  year         = {2025},
-  url          = {https://github.com/NetworkingWithKuramoto/kuramoto2}
-}
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "kuramoto2: Simulation code for quantitative and qualitative power-grid studies"
+authors:
+  - family-names: Benedek
+    given-names: Kristóf
+    orcid: "https://orcid.org/0009-0005-0328-156X"  # Optional: Replace with actual ORCID if available
+date-released: 2025-01-01  # Adjust if a real release date exists
+url: "https://github.com/NetworkingWithKuramoto/kuramoto2"
+version: "1.0.0"  # Replace with actual release tag if any
+license: "MIT"    # Replace if different license is used
+repository-code: "https://github.com/NetworkingWithKuramoto/kuramoto2"
+type: software
