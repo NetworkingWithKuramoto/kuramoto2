@@ -1,0 +1,7 @@
+@misc{hartmann2025kuramoto2,
+  author       = {Kristóf Benedek},
+  title        = {kuramoto2: Simulation code for quantitative and qualitative power-grid studies},
+  year         = {2025},
+  howpublished = {\url{https://github.com/NetworkingWithKuramoto/kuramoto2}},
+  note         = {GitHub repository, accessed July 2025}
+}
