@@ -4,23 +4,21 @@
 
 The code implements the second-order Kuramoto equation to simulate high-voltage power grids:
 
-\[
-m_i \ddot{\theta}_i + d_i \dot{\theta}_i = P_{m,i} - \sum_j W_{ij} \sin(\theta_i - \theta_j)
-\]
+![kura2_eq](kuraeq.png)
 
 In this model, each oscillator describes a generator or consumer, with inertia $m_i$, damping $d_i$, $P_i$ power injection, $\theta_i$ phase angle, $A_{ij}$ connection matrix.
 
 ## Expected network format
 
-Both the nodes and the edges has to be provided.
+Both the nodes and the edges have to be provided.
 
 The node format is a 4-column file
 ```
 ID(int) | Self-Frequency(float) | Community Index(int) | Boolean Mask(bool)
 ```
 - ID: node ID (starts from 1)
-- Self-frequency: this is in fact the injected power, $P_i$ in the Kuramoto equation.
-- Community Index: starts from 1, describes to which community does the given node belong
+- Self-frequency: this is in fact the injected power, $P_i$, in the Kuramoto equation.
+- Community Index: starts from 1, describes to which community the given node belongs
 - Boolean Mask: a mask to force the self-frequency from the file or randomize it.
   
 The edge format is also of 4-column:
@@ -31,7 +29,7 @@ ID1(int) | ID2(int) | Connection Weight(float) | Boolean Mask(bool)
 - Connection weight describes the importance of the connection between the two nodes
 - Boolean Mask is used to implement more sophisticated dynamics
 
-**Note:** ID starts from 0. This later should be changed to 0 due to better compatibility. some for loops also start from 1. This has to be changed as well.
+**Note:** ID starts from 0. This later should be changed to 0 due to better compatibility. Some for loops also start from 1. This has to be changed as well.
 ## ⚙️ Command Line Parameters
 
 Run the simulation via:
