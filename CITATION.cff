@@ -2,5 +2,5 @@
   author       = {Kristóf Benedek},
   title        = {{kuramoto2: Simulation code for quantitative and qualitative power-grid studies}},
   year         = {2025},
-  url          = {\url{https://github.com/NetworkingWithKuramoto/kuramoto2}}
+  url          = {https://github.com/NetworkingWithKuramoto/kuramoto2}
 }
