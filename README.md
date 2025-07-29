@@ -4,9 +4,9 @@
 
 The code implements the second-order Kuramoto equation to simulate high-voltage power grids:
 
-$$
+\[
 m_i \ddot{\theta}_i + d_i \dot{\theta}_i = P_{m,i} - \sum_j W_{ij} \sin(\theta_i - \theta_j)
-$$
+\]
 
 In this model, each oscillator describes a generator or consumer, with inertia $m_i$, damping $d_i$, $P_i$ power injection, $\theta_i$ phase angle, $A_{ij}$ connection matrix.
 
