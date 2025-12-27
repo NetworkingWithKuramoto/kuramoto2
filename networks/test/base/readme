@@ -1,0 +1,11 @@
+Sc 0:
+Test dataset without inertia and damping, full AC model
+
+Sc 1:
+Test dataset with inertia and damping, full AC model
+
+Sc 2:
+Small lattice, with 25 nodes without damping and inertia
+
+Sc 3:
+Large net, without damping and inertia, with some DC links
