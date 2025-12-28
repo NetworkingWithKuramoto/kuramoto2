@@ -21,7 +21,7 @@
 #include "src/utils/solvers/rk4.h"
 #include "src/utils/solvers/rkf45.h"
 #include "src/utils/type_handlers.h"
-#include "src/utils/solvers/gbs_integrator.h"
+#include "src/utils/solvers/gbs_integrator.h" // WIP
 #include "src/utils/random/random_generators.h"
 
 /*****************************************************************
@@ -35,7 +35,7 @@
 int     seed;           
 unsigned long long unique_id, state_id;        
 
-/* ---- Network Parameters ---- */
+/* ---- Network and Simulation Parameters ---- */
 int     num_nodes;        
 int     num_edges;      
 int     num_generators;  
@@ -50,17 +50,15 @@ int     early_stopping_type;
 int     early_stopping_time;
 float   early_stopping_threshold;
 int     saving_period;
-int    shifted_node_id;
-/* ---- Synchronization Model Parameters ---- */
+int     shifted_node_id;
 double  initial_phase_randomness;   
 double  coupling_0, coupling_target;
 double  coupling_current;     
 double  damping_coefficient;  
 double  failure_threshold;    
 double  precision_epsilon;   
-
-double  base_frequency;        
 double  frequency_noise;
+int     save_dense_state;
 
 /* ---- Time & Iteration Control ---- */
 int     num_stages;           
@@ -113,6 +111,7 @@ double  *coupling_sum;
 double  *interaction;
 double  *damping_array;
 double  *inv_inertia_array;
+
 /* ---- Output Files ---- */
 char    in_dir[250];
 char    out_dir[250];
@@ -121,6 +120,7 @@ char    edges_filename[550];
 char    nodes_filename[550];
 char    state_filename[550];
 char    state_fileids[250];
+char    dense_state_filename[550];
 
 /* ---- Scene Identifier ---- */
 int     scene;       
@@ -240,9 +240,9 @@ int main(int argc, char **argv)
     early_stopping_time = 1000;
     early_stopping_threshold = 0.001;
     saving_period = 50000;
-    base_frequency = 50.0;
     frequency_noise = 0.05;
     shifted_node_id = 0;
+    save_dense_state = 0;
     strcpy(in_dir, "test");
     strcpy(out_dir, "results");
     strcpy(network_type, "base");
@@ -300,6 +300,7 @@ int main(int argc, char **argv)
         else if (strcmp(argv[i], "-early") == 0) early_stopping_type = atoi(value);
         else if (strcmp(argv[i], "-earlyt") == 0) early_stopping_time = atoi(value);
         else if (strcmp(argv[i], "-earlyth") == 0) early_stopping_threshold = atof(value);
+        else if (strcmp(argv[i], "-save_dense") == 0) save_dense_state = atoi(value);
         else {
             printf("Error: Unknown argument %s\n", argv[i]);
             exit(1);
@@ -417,6 +418,8 @@ int main(int argc, char **argv)
         printf("# Early stopping time   : %d\n", early_stopping_time);
         printf("# Early stopping threshold : %f\n", early_stopping_threshold);
         printf("# Saving period         : %d\n", saving_period);
+        printf("# Random seed           : %d\n", seed);
+        printf("# Save dense state      : %d\n", save_dense_state);
         if (load_state) {
             printf("# Loaded state ID       : %llu\n", state_id);
         }
@@ -428,6 +431,24 @@ int main(int argc, char **argv)
 
     if (!verbose) printf("\n# Generating network...\n");
     generate_network();
+
+    if (save_dense_state) {
+        sprintf(dense_state_filename, 
+            "%s/%s/a_%f/k_%f/states/dense_state_l%f_a%f_t%f_sc%d_itth%d_itlc%d_initrand%f_normtyp%d_normint%f_id%llu.dat",
+            out_dir, network_type, damping_coefficient, coupling_target,
+            coupling_target, damping_coefficient, failure_threshold, scene,
+            loadsave_it_th, loadsave_it_cs,
+            initial_phase_randomness, norm_type, norm_a, unique_id);
+
+        FILE *dense_file = fopen(dense_state_filename, "w");
+        if (!dense_file) {
+            fprintf(stderr, "Error: Could not create dense state file %s\n", dense_state_filename);
+            exit(EXIT_FAILURE); 
+        }
+        fprintf(dense_file, "# Number of nodes: %d\n # Number of generators: %d\n", num_nodes, num_generators);
+        fprintf(dense_file, "# Iteration thermalization: %d\n # Iteration cascade: %d\n", max_it_thermal, max_it_cascade); 
+        fclose(dense_file);
+    }
 
     if (!verbose) printf("\n# Starting simulation...\n");
     step();
@@ -485,6 +506,8 @@ void print_help(void)
     printf("  -ls_it_th[num] : Iteration to load/save state from thermalization\n");
     printf("  -ls_it_cs[num] : Iteration to load/save state from cascade\n");
     printf("  -save_period[num] : Period for saving intermediate states\n");
+    printf("  -msl[num]    : Max number of last frequencies to save\n");
+    printf("  -save_dense[bool] : Save dense state (0: no, 1: yes)\n");
 
     printf("\n---- Normalization DC ----\n");
     printf("  -norm_typ[num] : Normalization type (0: tanh, 1: tanh-like, 2: linear, 3: fcr)\n");
@@ -514,7 +537,7 @@ void print_help(void)
  ***************************************************************************/
 
 void initialize_system() {
-    double base_frequency, weight, inertia, gen_damping, load_damping;
+    double weight, inertia, gen_damping, load_damping;
     int t, i, row, col, community_id, edge_type, force_freq_bool;
     force_freq_bool = 0;
     
@@ -591,8 +614,6 @@ void initialize_system() {
     }
 
     double total_sum = 0.0;
-    double random_sum = 0.0;
-    int random_count = 0;
     int gen_idx = 0;
     int load_idx = 0;
 
@@ -695,16 +716,35 @@ void initialize_system() {
             inv_inertia_array[i] = 0.0;
         }
 
-        /* Frequency assignment logic (unchanged) */
-        nodes[i].frequency = base_frequency * generateRandomFloat(0, 1) * frequency_noise; // Base frequency with small Gaussian noise
+        /* Frequency assignment logic */
+        double frequency = 0.0;
+        if (force_freq_from_file && force_freq_bool) {
+            frequency = power; // Using 'power' field as frequency when forced
+        } else if (force_freq_from_file && !force_freq_bool) {
+            frequency = power * (1 + gasdev(&seed) * frequency_noise); // Using 'power' field as frequency
+        } else if (random_self_freq) {
+            frequency = gasdev(&seed);
+        } else {
+            printf("Error: Invalid frequency assignment configuration.\n");
+            printf(" Either random_self_freq must be enabled or force_freq_from_file must be true.\n");
+            exit(EXIT_FAILURE);
+        }
+        nodes[i].frequency = frequency;
 
-        total_sum += nodes[i].power;
+        total_sum += power;
     }
 
+    
     fclose(file);
-    printf("# Min community ID: %d\n", min_community_id);
+    
+    double offset = 0;
+    if (fabs(total_sum) > 1e-6) {
+        offset = total_sum / num_nodes;
+    }
+    
     for (i = 0; i < num_nodes; i++) {
         nodes[i].community -= min_community_id;
+        nodes[i].power -= offset;
     }
     // num_communities = num_communities - min_community_id; // Adjust for zero-based indexing
 
@@ -1201,7 +1241,7 @@ void step() {
 
     if (!quiet_run) printf("\n# Stage %d, lambda %lf\n", stage_count + 1, lambda_thermal[1]);
     if (max_it_thermal != 0) {
-        for (t = 0; t <= max_it_thermal; t++) {
+        for (t = 0; t < max_it_thermal; t++) {
             x_out = x + delta;
             coupling_current = lambda_thermal[t];
 
@@ -1218,6 +1258,16 @@ void step() {
                             &x, x_out, &relerr, abserr, flag);
             handle_solver_flag(&flag, &relerr, &abserr, t);
             x += delta;
+
+            if (save_dense_state) {
+                FILE *dense_file = fopen(dense_state_filename, "a");
+                for (i = 0; i < num_nodes + num_generators; i++) {
+                    fprintf(dense_file, "%lf\t", state_variables[i]);
+                }
+                fprintf(dense_file, "\n");
+                fclose(dense_file);
+            }
+
             if ((early_stopping_type != 0 && t > early_stopping_time) || t == time_thermal[output_count] ) {
                 // Reset accumulators
                 z                = 0.0;
@@ -1288,7 +1338,7 @@ void step() {
             }
 
             // --- Output checkpoint ---
-            if (t == time_thermal[output_count]) {
+            if (t == time_thermal[output_count] || t == max_it_thermal-1) {
                 univ_order_param /= total_coupling_weight;
                 freq_spread_sum = freq_spread_sum / (double)num_generators;
                 freq_spread = freq_spread_square / (double)num_generators - freq_spread_sum * freq_spread_sum;
@@ -1387,7 +1437,7 @@ void step() {
                 prev_order_param = order_param;
             }
 
-            if ((t % saving_period == 0 && t != 0)|| t == max_it_thermal) {
+            if ((t % saving_period == 0 && t != 0)|| t == max_it_thermal-1) {
                 // ======================
                 // Final averages
                 // ======================
@@ -1494,7 +1544,7 @@ void step() {
     if (!quiet_run) printf("# Initial edge to cut: %d\n", initial_edge_cut);
 
     if (max_it_cascade != 0) {
-        for (t = 0; t <= max_it_cascade; t++) {
+        for (t = 0; t < max_it_cascade; t++) {
             x_out = x + delta;
 
             record_line_failures(t, state_variables);
@@ -1504,8 +1554,17 @@ void step() {
                             &x, x_out, &relerr, abserr, flag);
             handle_solver_flag(&flag, &relerr, &abserr, t);
             x += delta;
+            
+            if (save_dense_state) {
+                FILE *dense_file = fopen(dense_state_filename, "a");
+                for (i = 0; i < num_nodes + num_generators; i++) {
+                    fprintf(dense_file, "%lf\t", state_variables[i]);
+                }
+                fprintf(dense_file, "\n");
+                fclose(dense_file);
+            }
 
-            if (t == time_cascade[output_count]) {
+            if (t == time_cascade[output_count] || t == max_it_cascade-1) {
                 // reset accumulators
                 z = 0;
                 freq_spread_sum = 0;
@@ -1643,7 +1702,7 @@ void step() {
                 prev_order_param = order_param;
             }
 
-                if ((t % saving_period == 0 && t != 0)|| t == max_it_thermal) {
+                if ((t % saving_period == 0 && t != 0)|| t == max_it_cascade-1) {
                 // ======================
                 // Final averages
                 // ======================
