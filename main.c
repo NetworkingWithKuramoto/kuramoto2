@@ -59,8 +59,8 @@ double  damping_coefficient;
 double  failure_threshold;    
 double  precision_epsilon;   
 
-/* HVDC parameters */
-double  default_power;        
+double  base_frequency;        
+double  frequency_noise;
 
 /* ---- Time & Iteration Control ---- */
 int     num_stages;           
@@ -220,7 +220,6 @@ int main(int argc, char **argv)
     max_it_cascade = 1000;
     load_state = 0;
     save_state = 0;
-    default_power = 0.5;
     coupling_0 = 0.01;
     coupling_target = 0.5;
     damping_coefficient = 0.1;
@@ -241,8 +240,10 @@ int main(int argc, char **argv)
     early_stopping_time = 1000;
     early_stopping_threshold = 0.001;
     saving_period = 50000;
+    base_frequency = 50.0;
+    frequency_noise = 0.05;
     shifted_node_id = 0;
-    strcpy(in_dir, "hu387");
+    strcpy(in_dir, "test");
     strcpy(out_dir, "results");
     strcpy(network_type, "base");
 
@@ -268,7 +269,6 @@ int main(int argc, char **argv)
         else if (strcmp(argv[i], "-k") == 0) coupling_target = atof(value);
         else if (strcmp(argv[i], "-k0") == 0) coupling_0 = atof(value);
         else if (strcmp(argv[i], "-log_base") == 0) log_base = atof(value);
-        else if (strcmp(argv[i], "-def_pow") == 0) default_power = atof(value);
         else if (strcmp(argv[i], "-it_th") == 0) max_it_thermal = atoi(value);
         else if (strcmp(argv[i], "-it_lc") == 0) max_it_cascade = atoi(value);
         else if (strcmp(argv[i], "-alpha") == 0) damping_coefficient = atof(value);
@@ -520,30 +520,47 @@ void initialize_system() {
     
     FILE *file;
 
-    sprintf(edges_filename, "./networks/%s/%s/edges%d.data", in_dir, network_type, scene);
+    sprintf(edges_filename, "%s/%s/edges%d.data", in_dir, network_type, scene);
 
     file = fopen(edges_filename, "r");
+
     if (!file) {
         fprintf(stderr, "Error: Could not open edges file %s\n", edges_filename);
         exit(EXIT_FAILURE);
     }
     int min_node_id = 10;
-    while (fscanf(file, "%d %d %lf %d\n", &row, &col, &weight, &edge_type) == 4) {
-        num_edges++;
-        if (row > num_nodes) num_nodes = row;
-        if (col > num_nodes) num_nodes = col;
-        if (row < min_node_id) min_node_id = row;
-        if (col < min_node_id) min_node_id = col;
+    char line[8192];
+
+        while (fgets(line, sizeof(line), file)) {
+            char *p = line;
+
+            while (isspace((unsigned char)*p)) p++;
+            if (*p == '#' || *p == '\0' || *p == '\n')
+                continue;
+
+            int nread = sscanf(
+                p,
+                "%d %d %lf %d",
+                &row,
+                &col,
+                &weight,
+                &edge_type
+            );
+            num_edges++;
+            if (row > num_nodes) num_nodes = row;
+            if (col > num_nodes) num_nodes = col;
+            if (row < min_node_id) min_node_id = row;
+            if (col < min_node_id) min_node_id = col;
     }
     fclose(file);
     shifted_node_id = min_node_id;
-
+    printf("# Min node ID: %d, shifted_node_id: %d, num_nodes: %d\n", min_node_id, shifted_node_id, num_nodes);
     if (initial_edge_cut == -1) {
         srand(seed);
         initial_edge_cut = rand() % num_edges;
     }
 
-    sprintf(nodes_filename, "./networks/%s/%s/nodes%d.data", in_dir, network_type, scene);
+    sprintf(nodes_filename, "%s/%s/nodes%d.data", in_dir, network_type, scene);
     file = fopen(nodes_filename, "r");
 
     if (!file) {
@@ -627,7 +644,7 @@ void initialize_system() {
         }
 
         /* Remap fields depending on column count */
-        if (ncols <= 2) {
+        if (ncols == 2) {
             community_id     = 0;
             force_freq_bool  = 0;
             inertia          = 1.0;
@@ -679,7 +696,7 @@ void initialize_system() {
         }
 
         /* Frequency assignment logic (unchanged) */
-        nodes[i].frequency = 50.0 *(1.0 + generateRandomFloat(0, 1) * 0.05); // Base frequency with small Gaussian noise
+        nodes[i].frequency = base_frequency * generateRandomFloat(0, 1) * frequency_noise; // Base frequency with small Gaussian noise
 
         total_sum += nodes[i].power;
     }
@@ -700,16 +717,6 @@ void initialize_system() {
         nodes[0].load_damping,
         nodes[0].inertia,
         nodes[0].gen_index
-    );
-    printf("\n# Node 1000: Id: %d, Power: %lf, Frequency: %lf, Community: %d, Gen Damping: %lf, Load Damping: %lf, Inertia: %lf, Gen Index: %d",
-        nodes[999].node_id, 
-        nodes[999].power,
-        nodes[999].frequency,
-        nodes[999].community,
-        nodes[999].gen_damping,
-        nodes[999].load_damping,
-        nodes[999].inertia,
-        nodes[999].gen_index
     );
 
     if(do_community) {
@@ -764,7 +771,7 @@ void generate_network() {
     
     FILE* file;
 
-    sprintf(edges_filename, "./networks/%s/%s/edges%d.data", in_dir, network_type, scene);
+    sprintf(edges_filename, "%s/%s/edges%d.data", in_dir, network_type, scene);
     file = fopen(edges_filename, "r");
 
     if (!file) {
