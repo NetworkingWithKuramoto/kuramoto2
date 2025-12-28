@@ -445,8 +445,8 @@ int main(int argc, char **argv)
             fprintf(stderr, "Error: Could not create dense state file %s\n", dense_state_filename);
             exit(EXIT_FAILURE); 
         }
-        fprintf(dense_file, "# Number of nodes: %d\n # Number of generators: %d\n", num_nodes, num_generators);
-        fprintf(dense_file, "# Iteration thermalization: %d\n # Iteration cascade: %d\n", max_it_thermal, max_it_cascade); 
+        fprintf(dense_file, "# Number of nodes: %d\n# Number of generators: %d\n", num_nodes, num_generators);
+        fprintf(dense_file, "# Iteration thermalization: %d\n# Iteration cascade: %d\n", max_it_thermal, max_it_cascade); 
         fclose(dense_file);
     }
 
@@ -2085,5 +2085,3 @@ void write_output() {
         printf("# State saved successfully to %s and %s.\n", state_filename, state_fileids);
     }
 }
-
-
